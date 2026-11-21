@@ -3,7 +3,8 @@ import { unlink } from "node:fs/promises";
 import mongoose from "mongoose";
 
 import DocumentModel from "../models/document.model.js";
-import { extractDocumentText } from "../services/document-extraction.service.js";
+import DocumentChunk from "../models/document-chunk.model.js";
+import { processDocument } from "../services/document-processing.service.js";
 
 export const uploadDocument = async (req: Request, res: Response) => {
   const file = req.file;
@@ -48,30 +49,25 @@ export const uploadDocument = async (req: Request, res: Response) => {
 
     documentId = document._id.toString();
 
-    const extractedContent = await extractDocumentText(file.path);
+    const chunkCount = await processDocument({
+      documentId: document._id.toString(),
+      userId: req.userId,
+      filePath: file.path,
+    });
 
-    const extractedText =
-      typeof extractedContent === "string"
-        ? extractedContent
-        : extractedContent.text;
-
-    if (!extractedText.trim()) {
-      throw new Error("The uploaded document contains no extractable text");
-    }
-
-    document.extractedText = extractedText;
     document.status = "ready";
 
     await document.save();
 
     return res.status(201).json({
-      message: "Document uploaded successfully",
+      message: "Document uploaded and processed successfully",
       document: {
         id: document._id,
         originalName: document.originalName,
         fileType: document.fileType,
         fileSize: document.fileSize,
         status: document.status,
+        chunkCount,
         createdAt: document.createdAt,
       },
     });
@@ -79,6 +75,12 @@ export const uploadDocument = async (req: Request, res: Response) => {
     await unlink(file.path).catch(() => undefined);
 
     if (documentId) {
+      await DocumentChunk.deleteMany({
+        documentId,
+      }).catch((deleteError) => {
+        console.error("Document chunks cleanup error:", deleteError);
+      });
+
       await DocumentModel.findByIdAndDelete(documentId).catch((deleteError) => {
         console.error("Document cleanup error:", deleteError);
       });
@@ -163,12 +165,6 @@ export const getDocumentById = async (req: Request, res: Response) => {
 // DELETE /api/documents/:id
 export const deleteDocument = async (req: Request, res: Response) => {
   try {
-    if (!req.userId) {
-      return res.status(401).json({
-        message: "Authentication required",
-      });
-    }
-
     const id = req.params.id;
 
     if (typeof id !== "string" || !mongoose.Types.ObjectId.isValid(id)) {
@@ -177,7 +173,8 @@ export const deleteDocument = async (req: Request, res: Response) => {
       });
     }
 
-    const document = await DocumentModel.findOneAndDelete({
+    // Find the document belonging to the authenticated user.
+    const document = await DocumentModel.findOne({
       _id: id,
       userId: req.userId,
     });
@@ -188,17 +185,32 @@ export const deleteDocument = async (req: Request, res: Response) => {
       });
     }
 
-    await unlink(document.filePath).catch((error) => {
-      if (error.code !== "ENOENT") {
-        console.error("Uploaded file cleanup error:", error);
-      }
+    // Remove all chunks and embeddings associated with this document.
+    await DocumentChunk.deleteMany({
+      documentId: document._id,
+      userId: req.userId,
     });
 
+    // Remove the document record.
+    await DocumentModel.deleteOne({
+      _id: document._id,
+      userId: req.userId,
+    });
+
+    // Remove the physical file from local storage.
+    try {
+      await unlink(document.filePath);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+        throw error;
+      }
+    }
+
     return res.status(200).json({
-      message: "Document deleted successfully",
+      message: "Document and associated chunks deleted successfully",
     });
   } catch (error) {
-    console.error("Delete document error:", error);
+    console.error("Document deletion error:", error);
 
     return res.status(500).json({
       message: "Unable to delete document",
