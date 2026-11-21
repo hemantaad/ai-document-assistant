@@ -5,6 +5,8 @@ import helmet from "helmet";
 import rateLimit from "express-rate-limit";
 import authRoutes from "./routes/auth.routes.js";
 import documentRoutes from "./routes/document.routes.js";
+import chatRoutes from "./routes/chat.routes.js";
+import conversationRoutes from "./routes/conversation.routes.js";
 
 const app = express();
 
@@ -33,6 +35,8 @@ app.use("/api", apiLimiter);
 
 app.use("/api/auth", authRoutes);
 app.use("/api/documents", documentRoutes);
+app.use("/api/chat", chatRoutes);
+app.use("/api/conversations", conversationRoutes);
 
 // Health-check endpoint
 app.get("/api/health", (_req, res) => {
