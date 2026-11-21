@@ -7,6 +7,7 @@ import authRoutes from "./routes/auth.routes.js";
 import documentRoutes from "./routes/document.routes.js";
 import chatRoutes from "./routes/chat.routes.js";
 import conversationRoutes from "./routes/conversation.routes.js";
+import errorHandler from "./middleware/error.middleware.js";
 
 const app = express();
 
@@ -54,5 +55,7 @@ app.get("/api/health/db", (_req, res) => {
     readyState: mongoose.connection.readyState,
   });
 });
+
+app.use(errorHandler);
 
 export default app;
