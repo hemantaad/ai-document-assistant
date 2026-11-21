@@ -4,6 +4,7 @@ import cors from "cors";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
 import authRoutes from "./routes/auth.routes.js";
+import documentRoutes from "./routes/document.routes.js";
 
 const app = express();
 
@@ -14,7 +15,7 @@ app.use(helmet());
 app.use(
   cors({
     origin: process.env.CLIENT_URL || "http://localhost:5173",
-  })
+  }),
 );
 
 // Parse incoming JSON requests
@@ -31,6 +32,7 @@ const apiLimiter = rateLimit({
 app.use("/api", apiLimiter);
 
 app.use("/api/auth", authRoutes);
+app.use("/api/documents", documentRoutes);
 
 // Health-check endpoint
 app.get("/api/health", (_req, res) => {
