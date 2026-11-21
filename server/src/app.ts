@@ -3,6 +3,7 @@ import mongoose from "mongoose";
 import cors from "cors";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
+import authRoutes from "./routes/auth.routes.js";
 
 const app = express();
 
@@ -28,6 +29,8 @@ const apiLimiter = rateLimit({
 });
 
 app.use("/api", apiLimiter);
+
+app.use("/api/auth", authRoutes);
 
 // Health-check endpoint
 app.get("/api/health", (_req, res) => {
