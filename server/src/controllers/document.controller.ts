@@ -6,6 +6,8 @@ import DocumentModel from "../models/document.model.js";
 import DocumentChunk from "../models/document-chunk.model.js";
 import { processDocument } from "../services/document-processing.service.js";
 
+type SupportedFileType = "pdf" | "docx" | "txt";
+
 export const uploadDocument = async (req: Request, res: Response) => {
   const file = req.file;
 
@@ -36,11 +38,13 @@ export const uploadDocument = async (req: Request, res: Response) => {
       });
     }
 
+    const fileType: SupportedFileType = extension;
+
     const document = await DocumentModel.create({
-      userId: req.userId,
+      userId: new mongoose.Types.ObjectId(req.userId),
       originalName: file.originalname,
       storedName: file.filename,
-      fileType: extension,
+      fileType,
       mimeType: file.mimetype,
       fileSize: file.size,
       filePath: file.path,
@@ -50,7 +54,7 @@ export const uploadDocument = async (req: Request, res: Response) => {
     documentId = document._id.toString();
 
     const chunkCount = await processDocument({
-      documentId: document._id.toString(),
+      documentId,
       userId: req.userId,
       filePath: file.path,
     });
@@ -142,7 +146,7 @@ export const getDocumentById = async (req: Request, res: Response) => {
     const document = await DocumentModel.findOne({
       _id: id,
       userId: req.userId,
-    }).select("-filePath -storedName -__v");
+    }).select("-filePath -storedName -extractedText -__v");
 
     if (!document) {
       return res.status(404).json({
@@ -165,6 +169,12 @@ export const getDocumentById = async (req: Request, res: Response) => {
 // DELETE /api/documents/:id
 export const deleteDocument = async (req: Request, res: Response) => {
   try {
+    if (!req.userId) {
+      return res.status(401).json({
+        message: "Authentication required",
+      });
+    }
+
     const id = req.params.id;
 
     if (typeof id !== "string" || !mongoose.Types.ObjectId.isValid(id)) {
@@ -173,7 +183,6 @@ export const deleteDocument = async (req: Request, res: Response) => {
       });
     }
 
-    // Find the document belonging to the authenticated user.
     const document = await DocumentModel.findOne({
       _id: id,
       userId: req.userId,
@@ -185,24 +194,21 @@ export const deleteDocument = async (req: Request, res: Response) => {
       });
     }
 
-    // Remove all chunks and embeddings associated with this document.
     await DocumentChunk.deleteMany({
       documentId: document._id,
       userId: req.userId,
     });
 
-    // Remove the document record.
     await DocumentModel.deleteOne({
       _id: document._id,
       userId: req.userId,
     });
 
-    // Remove the physical file from local storage.
     try {
       await unlink(document.filePath);
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
-        throw error;
+        console.error("Physical document file cleanup error:", error);
       }
     }
 

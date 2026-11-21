@@ -1,23 +1,8 @@
-import mongoose, { Schema, Document } from "mongoose";
+import mongoose, { Schema, InferSchemaType } from "mongoose";
 
 export type DocumentStatus = "uploaded" | "processing" | "ready" | "failed";
 
-export interface IDocument extends Document {
-  userId: mongoose.Types.ObjectId;
-  originalName: string;
-  storedName: string;
-  fileType: "pdf" | "docx" | "txt";
-  mimeType: string;
-  fileSize: number;
-  filePath: string;
-  status: DocumentStatus;
-  extractedText?: string;
-  errorMessage?: string;
-  createdAt: Date;
-  updatedAt: Date;
-}
-
-const documentSchema = new Schema<IDocument>(
+const documentSchema = new Schema(
   {
     userId: {
       type: Schema.Types.ObjectId,
@@ -78,6 +63,8 @@ const documentSchema = new Schema<IDocument>(
   },
 );
 
-const DocumentModel = mongoose.model<IDocument>("Document", documentSchema);
+export type IDocument = InferSchemaType<typeof documentSchema>;
+
+const DocumentModel = mongoose.model("Document", documentSchema);
 
 export default DocumentModel;

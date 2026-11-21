@@ -1,12 +1,15 @@
 import multer from "multer";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
+import { mkdir } from "node:fs/promises";
 
 const uploadDirectory = path.resolve("uploads/documents");
 
 const storage = multer.diskStorage({
   destination: (_req, _file, callback) => {
-    callback(null, uploadDirectory);
+    mkdir(uploadDirectory, { recursive: true })
+      .then(() => callback(null, uploadDirectory))
+      .catch((error: Error) => callback(error, uploadDirectory));
   },
 
   filename: (_req, file, callback) => {
@@ -36,6 +39,8 @@ const upload = multer({
   limits: {
     fileSize: 10 * 1024 * 1024,
     files: 1,
+    fields: 0,
+    parts: 1,
   },
 });
 
