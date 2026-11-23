@@ -23,6 +23,12 @@ const documentSchema = new Schema(
       unique: true,
     },
 
+    fileId: {
+      type: String,
+      required: true,
+      unique: true,
+    },
+
     fileType: {
       type: String,
       enum: ["pdf", "docx", "txt"],
@@ -36,11 +42,6 @@ const documentSchema = new Schema(
 
     fileSize: {
       type: Number,
-      required: true,
-    },
-
-    filePath: {
-      type: String,
       required: true,
     },
 

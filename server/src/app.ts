@@ -8,6 +8,7 @@ import documentRoutes from "./routes/document.routes.js";
 import chatRoutes from "./routes/chat.routes.js";
 import conversationRoutes from "./routes/conversation.routes.js";
 import errorHandler from "./middleware/error.middleware.js";
+import databaseMiddleware from "./middleware/database.middleware.js";
 
 const app = express();
 
@@ -23,6 +24,9 @@ app.use(
 
 // Parse incoming JSON requests
 app.use(express.json({ limit: "1mb" }));
+
+// Ensure MongoDB is connected before handling API requests
+app.use("/api", databaseMiddleware);
 
 // Basic API rate limiting
 const apiLimiter = rateLimit({

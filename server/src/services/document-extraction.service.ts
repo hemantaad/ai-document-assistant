@@ -1,7 +1,5 @@
-import fs from "node:fs/promises";
 import * as pdfjs from "pdfjs-dist/legacy/build/pdf.mjs";
 import mammoth from "mammoth";
-import path from "node:path";
 
 interface ExtractedPage {
   pageNumber: number;
@@ -15,12 +13,10 @@ interface PdfExtractionResult {
 }
 
 export const extractPdfText = async (
-  filePath: string,
+  buffer: Buffer,
 ): Promise<PdfExtractionResult> => {
-  const fileBuffer = await fs.readFile(filePath);
-
   const loadingTask = pdfjs.getDocument({
-    data: new Uint8Array(fileBuffer),
+    data: new Uint8Array(buffer),
     useSystemFonts: true,
   });
 
@@ -30,7 +26,6 @@ export const extractPdfText = async (
 
   for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber++) {
     const page = await pdf.getPage(pageNumber);
-
     const textContent = await page.getTextContent();
 
     const pageText = textContent.items
@@ -54,34 +49,31 @@ export const extractPdfText = async (
   };
 };
 
-export const extractDocxText = async (filePath: string): Promise<string> => {
+export const extractDocxText = async (buffer: Buffer): Promise<string> => {
   const result = await mammoth.extractRawText({
-    path: filePath,
+    buffer,
   });
 
   return result.value.trim();
 };
 
-export const extractTxtText = async (filePath: string): Promise<string> => {
-  const content = await fs.readFile(filePath, "utf-8");
-
-  return content.trim();
+export const extractTxtText = async (buffer: Buffer): Promise<string> => {
+  return buffer.toString("utf-8").trim();
 };
 
 export const extractDocumentText = async (
-  filePath: string,
+  buffer: Buffer,
+  fileType: "pdf" | "docx" | "txt",
 ): Promise<string | PdfExtractionResult> => {
-  const extension = path.extname(filePath).toLowerCase();
+  switch (fileType) {
+    case "pdf":
+      return extractPdfText(buffer);
 
-  switch (extension) {
-    case ".pdf":
-      return extractPdfText(filePath);
+    case "docx":
+      return extractDocxText(buffer);
 
-    case ".docx":
-      return extractDocxText(filePath);
-
-    case ".txt":
-      return extractTxtText(filePath);
+    case "txt":
+      return extractTxtText(buffer);
 
     default:
       throw new Error("Unsupported document format");

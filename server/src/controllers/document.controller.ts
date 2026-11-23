@@ -1,13 +1,16 @@
 import type { Request, Response } from "express";
-import { unlink } from "node:fs/promises";
 import mongoose from "mongoose";
+import path from "node:path";
+import { randomUUID } from "node:crypto";
 
 import DocumentModel from "../models/document.model.js";
 import DocumentChunk from "../models/document-chunk.model.js";
 import { processDocument } from "../services/document-processing.service.js";
+import { storeFile, deleteStoredFile } from "../config/gridfs.js";
 
 type SupportedFileType = "pdf" | "docx" | "txt";
 
+// POST /api/documents
 export const uploadDocument = async (req: Request, res: Response) => {
   const file = req.file;
 
@@ -17,50 +20,53 @@ export const uploadDocument = async (req: Request, res: Response) => {
     });
   }
 
+  if (!req.userId) {
+    return res.status(401).json({
+      message: "Authentication required",
+    });
+  }
+
+  const extension = path.extname(file.originalname).toLowerCase();
+
+  if (extension !== ".pdf" && extension !== ".docx" && extension !== ".txt") {
+    return res.status(400).json({
+      message: "Unsupported file extension",
+    });
+  }
+
+  const fileType: SupportedFileType = extension.slice(1) as SupportedFileType;
+  const storedName = `${randomUUID()}${extension}`;
+
+  let fileId: string | undefined;
   let documentId: string | undefined;
 
   try {
-    if (!req.userId) {
-      await unlink(file.path).catch(() => undefined);
+    // Store the original file in MongoDB GridFS.
+    fileId = await storeFile(file.buffer, storedName, req.userId);
 
-      return res.status(401).json({
-        message: "Authentication required",
-      });
-    }
-
-    const extension = file.originalname.split(".").pop()?.toLowerCase();
-
-    if (extension !== "pdf" && extension !== "docx" && extension !== "txt") {
-      await unlink(file.path).catch(() => undefined);
-
-      return res.status(400).json({
-        message: "Unsupported file extension",
-      });
-    }
-
-    const fileType: SupportedFileType = extension;
-
+    // Create the document metadata record.
     const document = await DocumentModel.create({
       userId: new mongoose.Types.ObjectId(req.userId),
       originalName: file.originalname,
-      storedName: file.filename,
+      storedName,
+      fileId,
       fileType,
       mimeType: file.mimetype,
       fileSize: file.size,
-      filePath: file.path,
       status: "processing",
     });
 
     documentId = document._id.toString();
 
+    // Extract text and generate document chunks and embeddings.
     const chunkCount = await processDocument({
       documentId,
       userId: req.userId,
-      filePath: file.path,
+      buffer: file.buffer,
+      fileType,
     });
 
     document.status = "ready";
-
     await document.save();
 
     return res.status(201).json({
@@ -76,8 +82,7 @@ export const uploadDocument = async (req: Request, res: Response) => {
       },
     });
   } catch (error) {
-    await unlink(file.path).catch(() => undefined);
-
+    // Clean up partially created records and stored files.
     if (documentId) {
       await DocumentChunk.deleteMany({
         documentId,
@@ -86,7 +91,13 @@ export const uploadDocument = async (req: Request, res: Response) => {
       });
 
       await DocumentModel.findByIdAndDelete(documentId).catch((deleteError) => {
-        console.error("Document cleanup error:", deleteError);
+        console.error("Document metadata cleanup error:", deleteError);
+      });
+    }
+
+    if (fileId) {
+      await deleteStoredFile(fileId).catch((deleteError) => {
+        console.error("Stored file cleanup error:", deleteError);
       });
     }
 
@@ -110,7 +121,7 @@ export const getDocuments = async (req: Request, res: Response) => {
     const documents = await DocumentModel.find({
       userId: req.userId,
     })
-      .select("-filePath -storedName -extractedText -__v")
+      .select("-fileId -storedName -extractedText -__v")
       .sort({ createdAt: -1 });
 
     return res.status(200).json({
@@ -146,7 +157,7 @@ export const getDocumentById = async (req: Request, res: Response) => {
     const document = await DocumentModel.findOne({
       _id: id,
       userId: req.userId,
-    }).select("-filePath -storedName -extractedText -__v");
+    }).select("-fileId -storedName -extractedText -__v");
 
     if (!document) {
       return res.status(404).json({
@@ -194,26 +205,21 @@ export const deleteDocument = async (req: Request, res: Response) => {
       });
     }
 
+    // Remove associated chunks and the original GridFS file.
     await DocumentChunk.deleteMany({
       documentId: document._id,
       userId: req.userId,
     });
+
+    await deleteStoredFile(document.fileId);
 
     await DocumentModel.deleteOne({
       _id: document._id,
       userId: req.userId,
     });
 
-    try {
-      await unlink(document.filePath);
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
-        console.error("Physical document file cleanup error:", error);
-      }
-    }
-
     return res.status(200).json({
-      message: "Document and associated chunks deleted successfully",
+      message: "Document and associated files deleted successfully",
     });
   } catch (error) {
     console.error("Document deletion error:", error);

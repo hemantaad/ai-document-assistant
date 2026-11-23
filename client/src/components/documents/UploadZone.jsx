@@ -11,7 +11,7 @@ import {
 
 import { uploadDocument } from "../../services/documentService";
 
-const MAX_FILE_SIZE = 10 * 1024 * 1024;
+const MAX_FILE_SIZE = 4 * 1024 * 1024;
 const ALLOWED_EXTENSIONS = [".pdf", ".docx", ".txt"];
 
 function formatFileSize(bytes) {
@@ -47,7 +47,7 @@ function UploadZone({ onUploadSuccess }) {
 
     if (file.size > MAX_FILE_SIZE) {
       setSelectedFile(null);
-      setError("File size must not exceed 10 MB.");
+      setError("File size must not exceed 4 MB.");
       return;
     }
 
@@ -187,7 +187,7 @@ function UploadZone({ onUploadSuccess }) {
             TXT
           </span>
           <span className="text-xs text-slate-400">
-            Maximum file size: 10 MB
+            Maximum file size: 4 MB
           </span>
         </div>
       </div>

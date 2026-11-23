@@ -14,17 +14,19 @@ interface DocumentSection {
 interface ProcessDocumentOptions {
   documentId: string;
   userId: string;
-  filePath: string;
+  buffer: Buffer;
+  fileType: "pdf" | "docx" | "txt";
 }
 
 export const processDocument = async ({
   documentId,
   userId,
-  filePath,
+  buffer,
+  fileType,
 }: ProcessDocumentOptions): Promise<number> => {
-  const extractedContent = await extractDocumentText(filePath);
+  const extractedContent = await extractDocumentText(buffer, fileType);
 
-  // Normalize the extraction result into sections.
+  // Normalize extraction results into sections.
   // PDF documents retain their individual page numbers.
   const sections: DocumentSection[] =
     typeof extractedContent === "string"
